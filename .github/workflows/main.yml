@@ -1,0 +1,32 @@
+name: Gemini AI Bot
+
+# Когда запускать бота:
+on:
+  push:
+    branches: [ "main" ]  # Запускать при каждом сохранении кода
+  schedule:
+    - cron: '0 */6 * * *' # Перезапуск каждые 6 часов (чтобы бот не спал)
+  workflow_dispatch:      # Кнопка для ручного запуска
+
+jobs:
+  run-my-bot:
+    runs-on: ubuntu-latest # Используем сервер на Linux
+    steps:
+      - name: Копируем код из репозитория
+        uses: actions/checkout@v3
+
+      - name: Устанавливаем Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Устанавливаем библиотеки
+        run: pip install -r requirements.txt
+
+      - name: Запускаем бота
+        env:
+          # Эти данные GitHub возьмет из твоих Secrets
+          TG_TOKEN: ${{ secrets.TG_TOKEN }}
+          GEMINI_KEY: ${{ secrets.GEMINI_KEY }}
+        run: python bot.py
+        
