@@ -2,10 +2,8 @@ name: Gemini AI Bot
 
 on:
   push:
-    branches: [ "main" ]
-  schedule:
-    - cron: '0 */6 * * *' # Перезапуск каждые 6 часов
-  workflow_dispatch:      # Кнопка для ручного запуска
+    branches: [ "main", "основной" ] # Сработает при сохранении
+  workflow_dispatch:              # Кнопка ручного запуска
 
 jobs:
   run-bot:
