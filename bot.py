@@ -2,55 +2,85 @@ import telebot
 import requests
 import os
 
-# Получаем данные из секретов GitHub
+# Берем ключи из секретов GitHub (env переменные)
 TOKEN = os.getenv("TG_TOKEN") 
-GEMINI_KEY = os.getenv("GEMINI_KEY")
-
-# Список моделей: сначала пробуем новейшую 2.0, затем 1.5
-MODELS = ["gemini-2.0-flash", "gemini-1.5-flash"]
+DEEPSEEK_KEY = os.getenv("DEEPSEEK_KEY")
 
 bot = telebot.TeleBot(TOKEN)
 
-def get_ai_answer(prompt):
-    for model in MODELS:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GEMINI_KEY}"
-        payload = {
-            "contents": [{
-                "parts": [{"text": prompt}]
-            }]
-        }
-        try:
-            response = requests.post(url, json=payload, timeout=20)
-            data = response.json()
+def get_ai_code(user_prompt):
+    url = "https://api.deepseek.com/v1/chat/completions"
+    
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {DEEPSEEK_KEY}"
+    }
+    
+    payload = {
+        "model": "deepseek-chat",
+        "messages": [
+            {
+                "role": "system", 
+                "content": "You are a professional Python coder. Write only pure code without explanations. Use utf-8 encoding."
+            },
+            {
+                "role": "user", 
+                "content": f"Write Python code for: {user_prompt}"
+            }
+        ],
+        "stream": False
+    }
+
+    try:
+        response = requests.post(url, json=payload, headers=headers, timeout=30)
+        data = response.json()
+        
+        if 'choices' in data:
+            raw_code = data['choices'][0]['message']['content']
+            # Очистка от маркдаун-разметки типа ```python ... ```
+            clean_code = raw_code.replace("```python", "").replace("```", "").strip()
+            return clean_code
+        else:
+            error_msg = data.get('error', {}).get('message', 'Unknown API Error')
+            return f"Error from DeepSeek: {error_msg}"
             
-            if 'candidates' in data:
-                return data['candidates'][0]['content']['parts'][0]['text']
-            # Если ошибка "not found", цикл пойдет к следующей модели
-            continue 
-        except Exception:
-            continue
-            
-    return "❌ Ошибка: Модели Gemini 2.0 и 1.5 недоступны для этого ключа. Проверь регион в Google AI Studio."
+    except Exception as e:
+        return f"Request Error: {str(e)}"
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    bot.reply_to(message, "🚀 Бот на базе Gemini 2.0 Flash запущен!")
+    bot.reply_to(message, "Привет! Опиши задачу, и я пришлю тебе готовый .py файл с кодом от DeepSeek.")
 
 @bot.message_handler(func=lambda message: True)
-def handle_message(message):
-    # Отправляем статус "печатает", чтобы пользователь видел активность
-    bot.send_chat_action(message.chat.id, 'typing')
+def handle_msg(message):
+    status_msg = bot.reply_to(message, "🚀 DeepSeek генерирует код, подожди...")
     
-    answer = get_ai_answer(message.text)
+    code_result = get_ai_code(message.text)
     
-    # Если текст слишком длинный, Телеграм его не пропустит (лимит 4096 символов)
-    if len(answer) > 4000:
-        for x in range(0, len(answer), 4000):
-            bot.send_message(message.chat.id, answer[x:x+4000])
+    if code_result.startswith("Error"):
+        bot.edit_message_text(code_result, message.chat.id, status_msg.message_id)
     else:
-        bot.reply_to(message, answer)
+        # Сохраняем код во временный файл
+        filename = "generated_code.py"
+        try:
+            with open(filename, "w", encoding="utf-8") as f:
+                f.write(code_result)
+            
+            # Отправляем файл пользователю
+            with open(filename, "rb") as f:
+                bot.send_document(
+                    message.chat.id, 
+                    f, 
+                    caption="✅ Твой код готов! Создано нейросетью DeepSeek."
+                )
+            
+            # Удаляем файл после отправки и убираем статус-сообщение
+            os.remove(filename)
+            bot.delete_message(message.chat.id, status_msg.message_id)
+            
+        except Exception as e:
+            bot.edit_message_text(f"Ошибка при создании файла: {e}", message.chat.id, status_msg.message_id)
 
 if __name__ == "__main__":
-    print("Бот погнал...")
+    print("Бот запущен...")
     bot.infinity_polling()
-    
