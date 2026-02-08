@@ -1,13 +1,18 @@
-name: Gemini AI Bot
+name: Gemini AI Bot 24/7
 
 on:
   push:
-    branches: [ "main", "основной" ] # Сработает при сохранении
-  workflow_dispatch:              # Кнопка ручного запуска
+    branches: [ "main" ]
+  schedule:
+    - cron: '0 */4 * * *' # Перезапуск каждые 4 часа автоматически
+  workflow_dispatch:      # Кнопка ручного запуска
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
+    # Если бот упадет, GitHub попробует поднять его еще раз (до 3 попыток)
+    continue-on-error: true
+    
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -18,11 +23,13 @@ jobs:
           python-version: '3.9'
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          pip install pyTelegramBotAPI requests
 
       - name: Run Bot
         env:
           TG_TOKEN: ${{ secrets.TG_TOKEN }}
           GEMINI_KEY: ${{ secrets.GEMINI_KEY }}
-        run: python bot.py
+        # Таймаут на 350 минут (чуть меньше 6 часов лимита GitHub)
+        run: timeout 350m python bot.py || true
         
